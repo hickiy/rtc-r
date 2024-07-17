@@ -1,0 +1,14 @@
+# Rust-specific
+/target
+**/*.rs.bk
+
+# IDEs and editors
+/.idea
+*.swp
+*.swo
+.vscode/
+*.sublime-workspace
+
+# Operating System
+.DS_Store
+Thumbs.db
