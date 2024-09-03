@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC 本地测试 - iframe</title>
+</head>
+<body>
+    <h1>WebRTC 本地测试 - iframe</h1>
+    <script>
+        const configuration = {};
+        const pc2 = new RTCPeerConnection(configuration);
+
+        pc2.onicecandidate = e => {
+            if (e.candidate) {
+                parent.postMessage({ type: 'candidate', candidate: e.candidate }, '*');
+            }
+        };
+
+        window.addEventListener('message', async (event) => {
+            if (event.data.type === 'offer') {
+                await pc2.setRemoteDescription(new RTCSessionDescription(event.data.offer));
+                const answer = await pc2.createAnswer();
+                await pc2.setLocalDescription(answer);
+                parent.postMessage({ type: 'answer', answer: answer }, '*');
+            } else if (event.data.type === 'candidate') {
+                await pc2.addIceCandidate(new RTCIceCandidate(event.data.candidate));
+            }
+        });
+    </script>
+</body>
+</html>

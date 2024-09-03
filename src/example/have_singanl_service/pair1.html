@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC 本地测试 - 主窗口</title>
+    <style>
+        video {
+            width: 200px;
+            height: 200px;
+            margin: 10px;
+            border: 1px solid #000;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>WebRTC 本地测试 - 主窗口</h1>
+    <video id="localVideo" src="./video.mp4" autoplay playsinline loop></video>
+    <script>
+        const localVideo = document.getElementById('localVideo');
+        const localStream = localVideo.captureStream(); // 从视频元素捕获流
+        const configuration = {};
+        const pc1 = new RTCPeerConnection(configuration);
+
+        pc1.onicecandidate = e => {
+            if (e.candidate) {
+                signalingFrame.contentWindow.postMessage({ type: 'candidate', candidate: e.candidate }, '*');
+            }
+        };
+
+        localStream.getTracks().forEach(track => pc1.addTrack(track, localStream));
+
+        window.addEventListener('message', async (event) => {
+            if (event.data.type === 'answer') {
+                await pc1.setRemoteDescription(new RTCSessionDescription(event.data.answer));
+            } else if (event.data.type === 'candidate') {
+                await pc1.addIceCandidate(new RTCIceCandidate(event.data.candidate));
+            }
+        });
+
+        (async () => {
+            const offer = await pc1.createOffer();
+            await pc1.setLocalDescription(offer);
+            signalingFrame.contentWindow.postMessage({ type: 'offer', offer: offer }, '*');
+        })();
+    </script>
+</body>
+
+</html>

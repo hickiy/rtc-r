@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Demo</title>
+    <style>
+        video {
+            width: 320px;
+            height: 240px;
+            margin: 10px;
+            background-color: black;
+        }
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebRTC 本地测试</h1>
+    <video id="localVideo" autoplay playsinline loop></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+    <button id="startButton">开始连接</button>
+    <button id="callButton">呼叫</button>
+    <button id="hangupButton">挂断</button>
+    <script src="webrtc.js"></script>
+</body>
+</html>
