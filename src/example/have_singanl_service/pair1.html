@@ -3,53 +3,70 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>WebRTC 本地测试 - 主窗口</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Streaming with WebRTC</title>
     <style>
         video {
             width: 200px;
             height: 200px;
-            margin: 10px;
-            border: 1px solid #000;
-        }
-
-        button {
-            margin: 10px;
-            padding: 10px;
-            font-size: 16px;
         }
     </style>
 </head>
 
 <body>
-    <h1>WebRTC 本地测试 - 主窗口</h1>
-    <video id="localVideo" src="./video.mp4" autoplay playsinline loop></video>
+    <video id="videoElement" controls autoplay loop>
+        <source src="./video.mp4" type="video/mp4">您的浏览器不支持HTML5视频。
+    </video>
+    <button id="call">呼叫</button>
     <script>
-        const localVideo = document.getElementById('localVideo');
-        const localStream = localVideo.captureStream(); // 从视频元素捕获流
-        const configuration = {};
-        const pc1 = new RTCPeerConnection(configuration);
+        const videoElement = document.getElementById('videoElement');
+        const callButton = document.getElementById('call');
+        // 获取视频流
+        callButton.onclick = async () => {
+            const stream = videoElement.captureStream();
+            const iframeWindow = window.open('./pair2.html', 'pair2');
+            // 创建一个新的RTCPeerConnection
+            const peerConnection = new RTCPeerConnection();
 
-        pc1.onicecandidate = e => {
-            if (e.candidate) {
-                signalingFrame.contentWindow.postMessage({ type: 'candidate', candidate: e.candidate }, '*');
-            }
+            // 添加视频流到RTCPeerConnection
+            stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+
+            // 处理ICE候选
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    iframeWindow.postMessage(
+                        {
+                            type: 'candidate', candidate: event.candidate.toJSON()
+                        },
+                        window.location.origin
+                    );
+                }
+            };
+
+            // 创建offer并设置本地描述
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            setTimeout(() => {
+                // 发送offer到iframe
+                iframeWindow.postMessage(
+                    {
+                        type: 'offer', offer: offer
+                    },
+                    window.location.origin
+                );
+            }, 1000);
+            // 监听来自iframe的消息
+            window.addEventListener('message', async event => {
+                if (event.data.type === 'answer') {
+                    const remoteDesc = new RTCSessionDescription(event.data.answer);
+                    await peerConnection.setRemoteDescription(remoteDesc);
+                } else if (event.data.type === 'candidate') {
+                    const candidate = new RTCIceCandidate(event.data.candidate);
+                    await peerConnection.addIceCandidate(candidate);
+                }
+            });
         };
-
-        localStream.getTracks().forEach(track => pc1.addTrack(track, localStream));
-
-        window.addEventListener('message', async (event) => {
-            if (event.data.type === 'answer') {
-                await pc1.setRemoteDescription(new RTCSessionDescription(event.data.answer));
-            } else if (event.data.type === 'candidate') {
-                await pc1.addIceCandidate(new RTCIceCandidate(event.data.candidate));
-            }
-        });
-
-        (async () => {
-            const offer = await pc1.createOffer();
-            await pc1.setLocalDescription(offer);
-            signalingFrame.contentWindow.postMessage({ type: 'offer', offer: offer }, '*');
-        })();
     </script>
 </body>
 
