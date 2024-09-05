@@ -12,3 +12,8 @@
 # Operating System
 .DS_Store
 Thumbs.db
+
+# node.js
+node_modules/
+npm-debug.log
+dist/
