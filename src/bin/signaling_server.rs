@@ -1,7 +1,9 @@
 use warp::Filter;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex;
 use std::collections::HashMap;
+use futures::{StreamExt, SinkExt, stream::SplitSink};
+use std::sync::Arc;
 
 #[derive(Deserialize, Serialize, Clone)]
 struct SignalMessage {
@@ -10,7 +12,7 @@ struct SignalMessage {
     data: String,
 }
 
-type Clients = Arc<Mutex<HashMap<String, warp::ws::WsSender>>>;
+type Clients = Arc<Mutex<HashMap<String, SplitSink<warp::ws::WebSocket, warp::ws::Message>>>>;
 
 #[tokio::main]
 async fn main() {
@@ -34,14 +36,14 @@ async fn handle_connection(ws: warp::ws::WebSocket, clients: Clients) {
     let (client_ws_sender, mut client_ws_receiver) = ws.split();
     let client_id = uuid::Uuid::new_v4().to_string();
 
-    clients.lock().unwrap().insert(client_id.clone(), client_ws_sender);
+    clients.lock().await.insert(client_id.clone(), client_ws_sender);
 
     while let Some(result) = client_ws_receiver.next().await {
         match result {
             Ok(msg) => {
                 if let Ok(text) = msg.to_str() {
                     let signal_message: SignalMessage = serde_json::from_str(text).unwrap();
-                    if let Some(receiver) = clients.lock().unwrap().get(&signal_message.to) {
+                    if let Some(receiver) = clients.lock().await.get_mut(&signal_message.to) {
                         let _ = receiver.send(warp::ws::Message::text(signal_message.data.clone())).await;
                     }
                 }
@@ -53,5 +55,5 @@ async fn handle_connection(ws: warp::ws::WebSocket, clients: Clients) {
         }
     }
 
-    clients.lock().unwrap().remove(&client_id);
+    clients.lock().await.remove(&client_id);
 }
