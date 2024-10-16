@@ -1,13 +1,15 @@
-use warp::Filter;
-use warp::ws::Message;
+use futures::StreamExt;
+use futures::SinkExt;
+use futures_util::stream::SplitSink;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use futures::StreamExt;
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
+use warp::ws::Message;
+use warp::Filter;
 
-type Clients = Arc<Mutex<HashMap<String, warp::ws::WsSender>>>;
+type Clients = Arc<Mutex<HashMap<String, SplitSink<warp::ws::WebSocket, warp::ws::Message>>>>;
 
 #[derive(Deserialize, Serialize)]
 struct SignalMessage {
@@ -20,7 +22,10 @@ async fn handle_connection(ws: warp::ws::WebSocket, clients: Clients) {
     let (client_ws_sender, mut client_ws_receiver) = ws.split();
     let client_id = Uuid::new_v4().to_string();
 
-    clients.lock().await.insert(client_id.clone(), client_ws_sender);
+    clients
+        .lock()
+        .await
+        .insert(client_id.clone(), client_ws_sender);
 
     while let Some(result) = client_ws_receiver.next().await {
         match result {
@@ -29,14 +34,24 @@ async fn handle_connection(ws: warp::ws::WebSocket, clients: Clients) {
                     let signal_message: SignalMessage = serde_json::from_str(text).unwrap();
                     match signal_message.message_type.as_str() {
                         "signal" => {
-                            if let Some(receiver) = clients.lock().await.get_mut(&signal_message.to) {
-                                let _ = receiver.send(Message::text(signal_message.data.clone())).await;
+                            if let Some(receiver) = clients.lock().await.get_mut(&signal_message.to)
+                            {
+                                let _ = receiver
+                                    .send(Message::text(signal_message.data.clone()))
+                                    .await;
                             }
                         }
                         "list_clients" => {
-                            let client_list: Vec<String> = clients.lock().await.keys().cloned().collect();
+                            let client_list: Vec<String> =
+                                clients.lock().await.keys().cloned().collect();
                             let response = serde_json::to_string(&client_list).unwrap();
-                            let _ = clients.lock().await.get_mut(&client_id).unwrap().send(Message::text(response)).await;
+                            let _ = clients
+                                .lock()
+                                .await
+                                .get_mut(&client_id)
+                                .unwrap()
+                                .send(Message::text(response))
+                                .await;
                         }
                         _ => {}
                     }
@@ -62,7 +77,5 @@ async fn main() {
             ws.on_upgrade(move |socket| handle_connection(socket, clients))
         });
 
-    warp::serve(signal_route)
-        .run(([127, 0, 0, 1], 3030))
-        .await;
+    warp::serve(signal_route).run(([127, 0, 0, 1], 3030)).await;
 }

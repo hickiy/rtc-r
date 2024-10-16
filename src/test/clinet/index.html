@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>websoket clinet</title>
+</head>
+<body>
+  <h1>websoket clinet</h1>
+  <input type="text" id="message" placeholder="message">
+  <button id="send">send</button>
+  <ul id="messages"></ul>
+  <script>
+    const ws = new WebSocket('ws://localhost:8080');
+    const messages = document.getElementById('messages');
+    const message = document.getElementById('message');
+    const send = document.getElementById('send');
+
+    ws.onopen = () => {
+      console.log('connected');
+    };
+
+    ws.onmessage = (event) => {
+      const li = document.createElement('li');
+      li.innerText = event.data;
+      messages.appendChild(li);
+    };
+
+    send.onclick = () => {
+      ws.send(message.value);
+      message.value = '';
+    };
+  </script>
+</body>
+</html>
