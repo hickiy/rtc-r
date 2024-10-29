@@ -1,6 +1,5 @@
 use tokio::net::UdpSocket;
 use stun::message::*;
-use stun::server::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let mut res = Message::new();
-        res.build(&msg)?;
+        res.build(&msg.get_setters())?;
 
         let res_buf = res.raw;
         socket.send_to(&res_buf, &src).await?;
