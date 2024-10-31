@@ -3,6 +3,18 @@ name = "rtc-r"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "signal_server"
+path = "src/bin/signal_server.rs"
+
+[[bin]]
+name = "stun_server"
+path = "src/bin/stun_server.rs"
+
+[[bin]]
+name = "turn_server"
+path = "src/bin/turn_server.rs"
+
 [dependencies]
 warp = "0.3"
 tokio = { version = "1", features = ["full"] }
