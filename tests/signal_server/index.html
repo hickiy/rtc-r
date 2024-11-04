@@ -1,35 +1,117 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>websoket clinet</title>
+    <meta charset="UTF-8">
+    <title>WebSocket 客户端</title>
+    <!-- ...其他头部元素... -->
+    <style>
+        /* ...样式定义... */
+        body { font-family: Arial, sans-serif; }
+        #messages { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; }
+        #messageInput { width: 100%; }
+    </style>
 </head>
 <body>
-  <h1>websoket clinet</h1>
-  <input type="text" id="message" placeholder="message">
-  <button id="send">send</button>
-  <ul id="messages"></ul>
-  <script>
-    const ws = new WebSocket('ws://localhost:8080');
-    const messages = document.getElementById('messages');
-    const message = document.getElementById('message');
-    const send = document.getElementById('send');
+    <h1>WebSocket 客户端</h1>
+    <div>
+        <button id="connectBtn">连接服务器</button>
+    </div>
+    <div>
+        <h2>在线客户端列表</h2>
+        <select id="clientList">
+            <!-- 动态填充在线客户端 -->
+        </select>
+    </div>
+    <div>
+        <h2>发送消息</h2>
+        <textarea id="messageInput" rows="4"></textarea><br>
+        <button id="sendBtn">发送</button>
+    </div>
+    <div>
+        <h2>消息记录</h2>
+        <div id="messages">
+            <!-- 显示收到的消息 -->
+        </div>
+    </div>
+    <script>
+        // ...脚本开始...
+        let socket;
 
-    ws.onopen = () => {
-      console.log('connected');
-    };
+        document.getElementById('connectBtn').addEventListener('click', function() {
+            socket = new WebSocket('ws://127.0.0.1:3030/ws');
 
-    ws.onmessage = (event) => {
-      const li = document.createElement('li');
-      li.innerText = event.data;
-      messages.appendChild(li);
-    };
+            socket.onopen = function() {
+                console.log('已连接到服务器');
+                // 请求在线客户端列表
+                let listRequest = {
+                    message_type: "list_clients",
+                    to: "",
+                    data: ""
+                };
+                socket.send(JSON.stringify(listRequest));
+            };
 
-    send.onclick = () => {
-      ws.send(message.value);
-      message.value = '';
-    };
-  </script>
+            socket.onmessage = function(event) {
+                let message = event.data;
+                try {
+                    let data = JSON.parse(message);
+                    if (Array.isArray(data)) {
+                        // 更新在线客户端列表
+                        updateClientList(data);
+                    } else {
+                        displayMessage('收到消息：' + data);
+                    }
+                } catch (e) {
+                    displayMessage('收到消息：' + message);
+                }
+            };
+
+            socket.onclose = function() {
+                console.log('连接已关闭');
+            };
+
+            socket.onerror = function(error) {
+                console.log('发生错误：', error);
+            };
+        });
+
+        document.getElementById('sendBtn').addEventListener('click', function() {
+            let toClient = document.getElementById('clientList').value;
+            let messageContent = document.getElementById('messageInput').value.trim();
+
+            if (toClient && messageContent) {
+                let message = {
+                    message_type: "signal",
+                    to: toClient,
+                    data: messageContent
+                };
+                socket.send(JSON.stringify(message));
+                displayMessage('发送给 ' + toClient + '：' + messageContent);
+                document.getElementById('messageInput').value = '';
+            } else {
+                alert('请选择目标客户端并输入消息内容');
+            }
+        });
+
+        function updateClientList(clients) {
+            let clientList = document.getElementById('clientList');
+            clientList.innerHTML = '';
+            clients.forEach(function(clientId) {
+                let option = document.createElement('option');
+                option.value = clientId;
+                option.textContent = clientId;
+                clientList.appendChild(option);
+            });
+        }
+
+        function displayMessage(message) {
+            let messagesDiv = document.getElementById('messages');
+            let messageElement = document.createElement('p');
+            messageElement.textContent = message;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        // ...脚本结束...
+    </script>
 </body>
 </html>
