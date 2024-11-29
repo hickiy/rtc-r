@@ -20,6 +20,18 @@ def parse_stun_response(response):
     print(f"Magic Cookie: {magic_cookie}")
     print(f"Transaction ID: {transaction_id.hex()}")
 
+    # 解析XorMappedAddress属性
+    attribute_type, attribute_length = struct.unpack('!HH', response[20:24])
+    if attribute_type == 0x0020:  # XorMappedAddress
+        family = struct.unpack('!B', response[25:26])[0]
+        if family == 0x01:  # IPv4
+            port, = struct.unpack('!H', response[26:28])
+            port ^= magic_cookie >> 16
+            ip = struct.unpack('!I', response[28:32])[0]
+            ip ^= magic_cookie
+            ip = socket.inet_ntoa(struct.pack('!I', ip))
+            print(f"XorMappedAddress: {ip}:{port}")
+
 def test_stun_server(server_address):
     stun_request = create_stun_request()
     
