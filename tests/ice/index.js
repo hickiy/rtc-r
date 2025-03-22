@@ -7,19 +7,11 @@ function createStunRequest() {
     const msgLength = 0x0000;  // No attributes
     const magicCookie = 0x2112A442;
     const transactionId = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]);
-<<<<<<< HEAD
-
-=======
->>>>>>> 1ac19c3 (use js instead of python)
     const stunRequest = Buffer.alloc(20);
     stunRequest.writeUInt16BE(msgType, 0);
     stunRequest.writeUInt16BE(msgLength, 2);
     stunRequest.writeUInt32BE(magicCookie, 4);
     transactionId.copy(stunRequest, 8);
-<<<<<<< HEAD
-
-=======
->>>>>>> 1ac19c3 (use js instead of python)
     return stunRequest;
 }
 
@@ -28,20 +20,12 @@ function parseStunResponse(response) {
     const msgType = response.readUInt16BE(0);
     const msgLength = response.readUInt16BE(2);
     const magicCookie = response.readUInt32BE(4);
-<<<<<<< HEAD
     const transactionId = response.slice(8, 20).toString('hex');
 
     console.log(`Message Type: ${msgType}`);
     console.log(`Message Length: ${msgLength}`);
     console.log(`Magic Cookie: ${magicCookie}`);
     console.log(`Transaction ID: ${transactionId}`);
-=======
-    const transactionId = response.slice(8, 20);
-    console.log(`Message Type: ${msgType}`);
-    console.log(`Message Length: ${msgLength}`);
-    console.log(`Magic Cookie: ${magicCookie}`);
-    console.log(`Transaction ID: ${transactionId.toString('hex')}`);
->>>>>>> 1ac19c3 (use js instead of python)
 
     // 解析XorMappedAddress属性
     const attributeType = response.readUInt16BE(20);
@@ -67,14 +51,8 @@ function parseStunResponse(response) {
 function testStunServer(serverAddress) {
     const stunRequest = createStunRequest();
     const client = dgram.createSocket('udp4');
-<<<<<<< HEAD
 
     client.send(stunRequest, serverAddress.port, serverAddress.address, (err) => {
-=======
-    client.setTimeout(5000);  // 设置超时时间为5秒
-
-    client.send(stunRequest, 0, stunRequest.length, serverAddress.port, serverAddress.address, (err) => {
->>>>>>> 1ac19c3 (use js instead of python)
         if (err) {
             console.error(`Error sending STUN request: ${err.message}`);
             client.close();
@@ -89,27 +67,16 @@ function testStunServer(serverAddress) {
         client.close();
     });
 
-<<<<<<< HEAD
     client.on('error', (err) => {
         console.error(`Socket error: ${err.message}`);
         client.close();
     });
 
     client.setTimeout(5000, () => {
-=======
-    client.on('timeout', () => {
->>>>>>> 1ac19c3 (use js instead of python)
         console.log('Request timed out');
         client.close();
     });
 }
 
-<<<<<<< HEAD
 const serverAddress = { address: '127.0.0.1', port: 3478 };  // 替换为你的STUN服务器地址和端口
 testStunServer(serverAddress);
-=======
-if (require.main === module) {
-    const serverAddress = { address: '127.0.0.1', port: 3478 };  // 替换为你的STUN服务器地址和端口
-    testStunServer(serverAddress);
-}
->>>>>>> 1ac19c3 (use js instead of python)
