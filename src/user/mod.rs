@@ -63,7 +63,7 @@ fn valid_password(password: &str) -> bool {
 pub fn login(username: &str, password: &str) -> String {
   // chick password first
   if !valid_password(password) {
-    return "username or password is incorrect".to_string();
+    return "".to_string();
   }
   // user is'nt exist
   if !is_existing_user(&username) {

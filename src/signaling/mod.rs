@@ -1,63 +1,105 @@
-use tokio::net::TcpListener;
-use tokio_tungstenite::tungstenite::{protocol::Message, handshake::server::{Request, Response}};
+#![allow(dead_code, unused_imports)]
+use tokio::{ net::TcpListener, select };
+use tokio_tungstenite::tungstenite::{ protocol::Message, handshake::server::{ Request, Response } };
 use tokio_tungstenite::accept_hdr_async;
-use futures_util::{StreamExt, SinkExt};
-
-const PASSWORD: &str = "your_password";
+use futures_util::{ StreamExt, SinkExt };
+use tokio::sync::mpsc::{ UnboundedSender, UnboundedReceiver, unbounded_channel };
+use std::sync::Arc;
+use crate::user::{ login, logout };
+use crate::session::{ add_session, remove_session, get_session };
 
 pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
-    let listener = TcpListener::bind(addr).await?;
-    println!("WebSocket server listening on: {}", addr);
-    
-    loop {
-        let (stream, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            // 握手认证回调
-            let callback = |req: &Request, mut response: Response| {
-                // 例如用自定义 Header: Authorization
-                let authorized = req.headers()
-                    .get("authorization")
-                    .and_then(|v| v.to_str().ok())
-                    .map(|v| v == PASSWORD)
-                    .unwrap_or(false);
+  let listener = TcpListener::bind(addr).await?;
+  println!("WebSocket server listening on: {}", addr);
+  loop {
+    let (stream, _) = listener.accept().await?;
+    tokio::spawn(async move {
+      let mut temp_name = String::new();
+      let callback = |req: &Request, response: Response| {
+        let headers = req.headers();
+        let username = headers
+          .get("username")
+          .and_then(|v| v.to_str().ok())
+          .unwrap_or("");
+        let password = headers
+          .get("password")
+          .and_then(|v| v.to_str().ok())
+          .unwrap_or("");
+        let authorized = !login(username, password).is_empty();
+        temp_name = username.to_string();
+        if authorized {
+          Ok(response)
+        } else {
+          Err(
+            tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(
+              Some("Unauthorized".into())
+            )
+          )
+        }
+      };
 
-                if authorized {
-                    Ok(response)
-                } else {
-                    // 拒绝握手
-                    Err(tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(Some("Unauthorized".into())))
-                }
-            };
+      let ws_stream = accept_hdr_async(stream, callback).await;
+      match ws_stream {
+        Ok(ws_stream) => {
+          // 拆分为 Sink 和 Stream
+          let (mut ws_sink, mut ws_stream) = ws_stream.split();
+          // 创建 mpsc channel
+          let (tx, mut rx): (UnboundedSender<Message>, UnboundedReceiver<Message>) = unbounded_channel();
+          // 注册 session，存 tx
+          add_session(&temp_name, Arc::new(tx.clone()));
+          println!("New WebSocket connection");
 
-            let ws_stream = accept_hdr_async(stream, callback).await;
-            match ws_stream {
-                Ok(mut ws_stream) => {
-                    println!("New WebSocket connection");
-                    while let Some(msg) = ws_stream.next().await {
-                        match msg {
-                            Ok(Message::Text(text)) => {
-                                println!("Received: {}", text);
-                                if let Err(e) = ws_stream.send(Message::Text(text)).await {
-                                    eprintln!("Send error: {}", e);
-                                    break;
-                                }
-                            }
-                            Ok(Message::Binary(bin)) => {
-                                if let Err(e) = ws_stream.send(Message::Binary(bin)).await {
-                                    eprintln!("Send error: {}", e);
-                                    break;
-                                }
-                            }
-                            Ok(Message::Close(_)) => {
-                                println!("Connection closed");
+          loop {
+            select! {
+              // 客户端发来的消息
+              msg = ws_stream.next() => {
+                match msg {
+                Some(Ok(msg)) => {
+                    match msg {
+                        Message::Ping(payload) => {
+                            // 回复 Pong
+                            if let Err(e) = ws_sink.send(Message::Pong(payload)).await {
+                                eprintln!("Pong send error: {}", e);
                                 break;
                             }
-                            _ => {}
                         }
+                        Message::Text(text) => {
+                            println!("Received text message: {}", text);
+                            // 这里可以根据业务逻辑处理文本消息
+                            // 例如：广播、私聊、命令等
+                        }
+                        Message::Close(frame) => {
+                            println!("Received close: {:?}", frame);
+                            break;
+                        }
+                        _ => {}
                     }
                 }
-                Err(e) => eprintln!("WebSocket handshake error: {}", e),
+                Some(Err(e)) => {
+                    eprintln!("WebSocket error: {}", e);
+                    break;
+                }
+                None => {
+                    // 客户端断开连接
+                    println!("Client disconnected");
+                    break;
+                }
+                }
+              }
+              // 其他线程推送过来的消息
+              Some(push_msg) = rx.recv() => {
+                if let Err(e) = ws_sink.send(push_msg).await {
+                  eprintln!("Send error: {}", e);
+                  break;
+                }
+              }
             }
-        });
-    }
+          }
+          // 断开时移除 session
+          remove_session(&temp_name);
+        }
+        Err(e) => eprintln!("WebSocket handshake error: {}", e),
+      }
+    });
+  }
 }
