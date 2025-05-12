@@ -1,4 +1,11 @@
 #![allow(dead_code, unused_imports)]
+use axum::{
+    extract::ws::{WebSocketUpgrade, Message as AxumMessage, WebSocket},
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use std::net::SocketAddr;
 use tokio::{ net::TcpListener, select };
 use tokio_tungstenite::tungstenite::{ protocol::Message, handshake::server::{ Request, Response } };
 use tokio_tungstenite::accept_hdr_async;
@@ -7,6 +14,51 @@ use tokio::sync::mpsc::{ UnboundedSender, UnboundedReceiver, unbounded_channel }
 use std::sync::Arc;
 use crate::user::{ login, logout };
 use crate::session::{ add_session, remove_session, get_session };
+
+async fn websocket_handler(ws: WebSocketUpgrade, req: axum::http::Request<axum::body::Body>) -> impl IntoResponse {
+    // get username and password from query params
+    let query = req.uri().query().unwrap_or("");
+    let params: std::collections::HashMap<_, _> = url::form_urlencoded
+        ::parse(query.as_bytes())
+        .into_owned()
+        .collect();
+    let username = params
+        .get("username")
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let password = params
+        .get("password")
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let authorized = !login(username, password).is_empty();
+    println!("username: {}, passpword: {}, authorized: {}", username, password, authorized);
+    if !authorized {
+        return Err(axum::http::StatusCode::UNAUTHORIZED);
+    }
+    ws.on_upgrade(handle_socket)
+}
+
+async fn handle_socket(mut socket: WebSocket) {
+    // 这里处理 WebSocket 消息
+    while let Some(Ok(msg)) = socket.recv().await {
+        if let AxumMessage::Text(text) = msg {
+            // 回显
+            let _ = socket.send(AxumMessage::Text(format!("Echo: {}", text))).await;
+        }
+    }
+}
+
+pub async fn run_web_server(addr: &str) {
+    let app = Router::new()
+        .route("/ws", get(websocket_handler));
+
+    let addr: SocketAddr = addr.parse().unwrap();
+    println!("Listening on {}", addr);
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}
 
 pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
   let listener = TcpListener::bind(addr).await?;

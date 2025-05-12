@@ -4,6 +4,7 @@
 
 
 var myHostname = window.location.hostname;
+var port = window.location.port;
 if (!myHostname) {
   myHostname = "localhost";
 }
@@ -95,10 +96,24 @@ function connect() {
   if (document.location.protocol === "https:") {
     scheme += "s";
   }
-  serverUrl = scheme + "://" + myHostname + ":6503";
+  serverUrl = scheme + "://" + myHostname + ":" + port + "/ws";
+  let username = document.getElementById("name").value;
+  let password = document.getElementById("password").value;
+
+  if (username.length < 1) {
+    alert("Please enter a username before connecting.");
+    return;
+  }
+
+  if (password.length < 1) {
+    alert("Please enter a password before connecting.");
+    return;
+  }
+
+  serverUrl += "?username=" + username + "&password=" + password;
 
   log(`Connecting to server: ${serverUrl}`);
-  connection = new WebSocket(serverUrl, "json");
+  connection = new WebSocket(serverUrl);
 
   connection.onopen = function(evt) {
     document.getElementById("text").disabled = false;

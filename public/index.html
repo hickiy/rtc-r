@@ -1,5 +1,6 @@
 <!doctype html>
 <html>
+
 <head>
   <title>WebSocket Chat Demo with WebRTC Calling</title>
   <meta charset="utf-8">
@@ -8,14 +9,21 @@
   <script type="text/javascript" src="chatclient.js"></script>
   <script src="adapter.js"></script>
 </head>
+
 <body>
   <div class="container">
     <div class="infobox">
-      <p class="mdn-disclaimer">This text and audio/video chat example is offered as-is for demonstration purposes only, and should not be used for any other purpose.
+      <p class="mdn-disclaimer">This text and audio/video chat example is offered as-is for demonstration purposes only,
+        and should not be used for any other purpose.
       </p>
       <p>Click a username in the user list to ask them to enter a one-on-one video chat with you.</p>
-      <p>Enter a username: <input id="name" type="text" maxlength="12" required autocomplete="username" inputmode="verbatim" placeholder="Username">
-        <input type="button" name="login" value="Log in" onclick="connect()"></p>
+      <p>Enter a username and a password:
+        <input id="name" type="text" maxlength="12" required autocomplete="username" inputmode="text"
+          placeholder="Username">
+        <input id="password" type="password" maxlength="6" required autocomplete="pwassword" inputmode="numeric"
+          placeholder="Password">
+        <input type="button" name="login" value="Log in" onclick="connect()">
+      </p>
     </div>
     <ul class="userlistbox"></ul>
     <div class="chatbox"></div>
@@ -28,10 +36,12 @@
     </div>
     <div class="empty-container"></div>
     <div class="chat-controls">
-      Chat:<br/>
-      <input id="text" type="text" name="text" size="100" maxlength="256" placeholder="Say something meaningful..." autocomplete="off" onkeyup="handleKey(event)" disabled>
+      Chat:<br />
+      <input id="text" type="text" name="text" size="100" maxlength="256" placeholder="Say something meaningful..."
+        autocomplete="off" onkeyup="handleKey(event)" disabled>
       <input type="button" id="send" name="send" value="Send" onclick="handleSendButton()" disabled>
     </div>
   </div>
 </body>
+
 </html>
