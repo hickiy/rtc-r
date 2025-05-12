@@ -46,7 +46,7 @@ pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
           // 创建 mpsc channel
           let (tx, mut rx): (UnboundedSender<Message>, UnboundedReceiver<Message>) = unbounded_channel();
           // 注册 session，存 tx
-          add_session(&temp_name, Arc::new(tx.clone()));
+          let session_id = add_session(&temp_name, Arc::new(tx.clone()));
           println!("New WebSocket connection");
 
           loop {
@@ -65,11 +65,26 @@ pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
                         }
                         Message::Text(text) => {
                             println!("Received text message: {}", text);
-                            // 这里可以根据业务逻辑处理文本消息
-                            // 例如：广播、私聊、命令等
+                            let parts: Vec<&str> = text.splitn(2, ':').collect();
+                            if parts.len() == 2 {
+                              let session_id = parts[0].trim();
+                              let message = parts[1].trim();
+                              if let Some(tx) = get_session(session_id) {
+                                // 发送消息到指定的 session
+                                if let Err(e) = tx.send(Message::Text(message.into())) {
+                                  eprintln!("Send error: {}", e);
+                                  break;
+                                }
+                              } else {
+                                let _ = ws_sink.send(Message::Text(format!("Session {} not found", session_id))).await;
+                              }
+                            } else {
+                              let _ = ws_sink.send(Message::Text("Invalid message format. Use 'target: message'.".into())).await;
+                            }
                         }
                         Message::Close(frame) => {
                             println!("Received close: {:?}", frame);
+                            remove_session(&temp_name);
                             break;
                         }
                         _ => {}
@@ -77,18 +92,20 @@ pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
                 }
                 Some(Err(e)) => {
                     eprintln!("WebSocket error: {}", e);
+                    remove_session(&session_id);
                     break;
                 }
                 None => {
                     // 客户端断开连接
                     println!("Client disconnected");
+                    remove_session(&session_id);
                     break;
                 }
                 }
               }
               // 其他线程推送过来的消息
               Some(push_msg) = rx.recv() => {
-                if let Err(e) = ws_sink.send(push_msg).await {
+                if let Err(e) = ws_sink.send(push_msg).await { 
                   eprintln!("Send error: {}", e);
                   break;
                 }
@@ -96,7 +113,7 @@ pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
             }
           }
           // 断开时移除 session
-          remove_session(&temp_name);
+          remove_session(&session_id);
         }
         Err(e) => eprintln!("WebSocket handshake error: {}", e),
       }

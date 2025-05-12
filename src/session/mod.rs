@@ -17,14 +17,15 @@ pub struct Session {
   // 最后活动时间（Unix时间戳，单位秒）
   pub last_active_at: u64,
   // 发送消息的通道
-  pub tx: Tx
+  pub tx: Tx,
 }
 
 // 全局会话表
-pub static SESSION_MAP: LazyLock<Mutex<HashMap<String, Session>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+pub static SESSION_MAP: LazyLock<Mutex<HashMap<String, Session>>> = LazyLock::new(||
+  Mutex::new(HashMap::new())
+);
 
-pub fn add_session(username: &str, tx:  Tx) -> String {
+pub fn add_session(username: &str, tx: Tx) -> String {
   let id = Uuid::new_v4().to_string();
   let session = Session {
     id: id.clone(),
@@ -44,10 +45,10 @@ pub fn remove_session(id: &str) {
   session_store.remove(id);
 }
 
-pub fn get_session(id: &str) -> Option<String> {
+pub fn get_session(id: &str) -> Option<Tx> {
   let session_store = SESSION_MAP.lock().unwrap();
-  if let Some(session) = session_store.get(id) {
-    Some(session.id.clone())
+  if let Some(session  ) = session_store.get(id) {
+    Some(session.tx.clone())
   } else {
     None
   }
