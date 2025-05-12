@@ -15,3 +15,4 @@ tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.20" }
 stun = { version = "0.7.0" }
 turn = { version = "0.9.0" }
+url = "2.3"

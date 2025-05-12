@@ -16,17 +16,22 @@ pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
     tokio::spawn(async move {
       let mut temp_name = String::new();
       let callback = |req: &Request, response: Response| {
-        let headers = req.headers();
-        let username = headers
+        let query = req.uri().query().unwrap_or("");
+        let params: std::collections::HashMap<_, _> = url::form_urlencoded
+          ::parse(query.as_bytes())
+          .into_owned()
+          .collect();
+        let username = params
           .get("username")
-          .and_then(|v| v.to_str().ok())
+          .map(|s| s.as_str())
           .unwrap_or("");
-        let password = headers
+        let password = params
           .get("password")
-          .and_then(|v| v.to_str().ok())
+          .map(|s| s.as_str())
           .unwrap_or("");
         let authorized = !login(username, password).is_empty();
         temp_name = username.to_string();
+        println!("username: {}, passpword: {}, authorized: {}", username, password, authorized);
         if authorized {
           Ok(response)
         } else {
@@ -44,7 +49,10 @@ pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
           // 拆分为 Sink 和 Stream
           let (mut ws_sink, mut ws_stream) = ws_stream.split();
           // 创建 mpsc channel
-          let (tx, mut rx): (UnboundedSender<Message>, UnboundedReceiver<Message>) = unbounded_channel();
+          let (tx, mut rx): (
+            UnboundedSender<Message>,
+            UnboundedReceiver<Message>,
+          ) = unbounded_channel();
           // 注册 session，存 tx
           let session_id = add_session(&temp_name, Arc::new(tx.clone()));
           println!("New WebSocket connection");

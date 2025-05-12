@@ -6,7 +6,7 @@ use jsonwebtoken::{ encode, Header, EncodingKey };
 use serde::{ Serialize, Deserialize };
 use chrono::{ Utc, Duration };
 
-const HASHED_FILE_PATH: &str = "./src/user/hashed.txt";
+const HASHED_FILE_PATH: &str = "./public/hashed.txt";
 const SECRET: [u8; 6] = [115, 101, 99, 114, 101, 116];
 
 // This struct is used to represent the JWT claims
