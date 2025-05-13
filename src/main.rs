@@ -1,9 +1,6 @@
-use rtc_r::signaling::run_websocket_server;
+use rtc_r::signaling::run_web_server;
 
 #[tokio::main]
 async fn main() {
-    // 监听 127.0.0.1:8888，可以根据需要修改端口
-    if let Err(e) = run_websocket_server("127.0.0.1:8888").await {
-        eprintln!("WebSocket server error: {}", e);
-    }
+  run_web_server("127.0.0.1:8888").await;
 }

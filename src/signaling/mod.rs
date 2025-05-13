@@ -1,182 +1,31 @@
-#![allow(dead_code, unused_imports)]
+#![allow(dead_code)]
+use tower_http::services::ServeDir;
 use axum::{
-    extract::ws::{WebSocketUpgrade, Message as AxumMessage, WebSocket},
-    response::IntoResponse,
-    routing::get,
-    Router,
+  response::IntoResponse,
+  routing::{get, get_service},
+  Router
 };
-use std::net::SocketAddr;
-use tokio::{ net::TcpListener, select };
-use tokio_tungstenite::tungstenite::{ protocol::Message, handshake::server::{ Request, Response } };
-use tokio_tungstenite::accept_hdr_async;
-use futures_util::{ StreamExt, SinkExt };
-use tokio::sync::mpsc::{ UnboundedSender, UnboundedReceiver, unbounded_channel };
-use std::sync::Arc;
-use crate::user::{ login, logout };
-use crate::session::{ add_session, remove_session, get_session };
 
-async fn websocket_handler(ws: WebSocketUpgrade, req: axum::http::Request<axum::body::Body>) -> impl IntoResponse {
-    // get username and password from query params
-    let query = req.uri().query().unwrap_or("");
-    let params: std::collections::HashMap<_, _> = url::form_urlencoded
-        ::parse(query.as_bytes())
-        .into_owned()
-        .collect();
-    let username = params
-        .get("username")
-        .map(|s| s.as_str())
-        .unwrap_or("");
-    let password = params
-        .get("password")
-        .map(|s| s.as_str())
-        .unwrap_or("");
-    let authorized = !login(username, password).is_empty();
-    println!("username: {}, passpword: {}, authorized: {}", username, password, authorized);
-    if !authorized {
-        return Err(axum::http::StatusCode::UNAUTHORIZED);
-    }
-    ws.on_upgrade(handle_socket)
+async fn socket_handler() -> impl IntoResponse {
+  "WebSocket connection established"
 }
 
-async fn handle_socket(mut socket: WebSocket) {
-    // 这里处理 WebSocket 消息
-    while let Some(Ok(msg)) = socket.recv().await {
-        if let AxumMessage::Text(text) = msg {
-            // 回显
-            let _ = socket.send(AxumMessage::Text(format!("Echo: {}", text))).await;
-        }
-    }
+async fn login_handler() -> impl IntoResponse {
+  "Login page"
+}
+
+async fn logout_handler() -> impl IntoResponse {
+  "Logout page"
 }
 
 pub async fn run_web_server(addr: &str) {
-    let app = Router::new()
-        .route("/ws", get(websocket_handler));
+  let app = Router::new()
+    .route("/login", get(login_handler))
+    .route("/logout", get(logout_handler))
+    .route("/ws", get(socket_handler))
+    .fallback_service(get_service(ServeDir::new("./public")));
 
-    let addr: SocketAddr = addr.parse().unwrap();
-    println!("Listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
-}
-
-pub async fn run_websocket_server(addr: &str) -> tokio::io::Result<()> {
-  let listener = TcpListener::bind(addr).await?;
-  println!("WebSocket server listening on: {}", addr);
-  loop {
-    let (stream, _) = listener.accept().await?;
-    tokio::spawn(async move {
-      let mut temp_name = String::new();
-      let callback = |req: &Request, response: Response| {
-        let query = req.uri().query().unwrap_or("");
-        let params: std::collections::HashMap<_, _> = url::form_urlencoded
-          ::parse(query.as_bytes())
-          .into_owned()
-          .collect();
-        let username = params
-          .get("username")
-          .map(|s| s.as_str())
-          .unwrap_or("");
-        let password = params
-          .get("password")
-          .map(|s| s.as_str())
-          .unwrap_or("");
-        let authorized = !login(username, password).is_empty();
-        temp_name = username.to_string();
-        println!("username: {}, passpword: {}, authorized: {}", username, password, authorized);
-        if authorized {
-          Ok(response)
-        } else {
-          Err(
-            tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(
-              Some("Unauthorized".into())
-            )
-          )
-        }
-      };
-
-      let ws_stream = accept_hdr_async(stream, callback).await;
-      match ws_stream {
-        Ok(ws_stream) => {
-          // 拆分为 Sink 和 Stream
-          let (mut ws_sink, mut ws_stream) = ws_stream.split();
-          // 创建 mpsc channel
-          let (tx, mut rx): (
-            UnboundedSender<Message>,
-            UnboundedReceiver<Message>,
-          ) = unbounded_channel();
-          // 注册 session，存 tx
-          let session_id = add_session(&temp_name, Arc::new(tx.clone()));
-          println!("New WebSocket connection");
-
-          loop {
-            select! {
-              // 客户端发来的消息
-              msg = ws_stream.next() => {
-                match msg {
-                Some(Ok(msg)) => {
-                    match msg {
-                        Message::Ping(payload) => {
-                            // 回复 Pong
-                            if let Err(e) = ws_sink.send(Message::Pong(payload)).await {
-                                eprintln!("Pong send error: {}", e);
-                                break;
-                            }
-                        }
-                        Message::Text(text) => {
-                            println!("Received text message: {}", text);
-                            let parts: Vec<&str> = text.splitn(2, ':').collect();
-                            if parts.len() == 2 {
-                              let session_id = parts[0].trim();
-                              let message = parts[1].trim();
-                              if let Some(tx) = get_session(session_id) {
-                                // 发送消息到指定的 session
-                                if let Err(e) = tx.send(Message::Text(message.into())) {
-                                  eprintln!("Send error: {}", e);
-                                  break;
-                                }
-                              } else {
-                                let _ = ws_sink.send(Message::Text(format!("Session {} not found", session_id))).await;
-                              }
-                            } else {
-                              let _ = ws_sink.send(Message::Text("Invalid message format. Use 'target: message'.".into())).await;
-                            }
-                        }
-                        Message::Close(frame) => {
-                            println!("Received close: {:?}", frame);
-                            remove_session(&temp_name);
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-                Some(Err(e)) => {
-                    eprintln!("WebSocket error: {}", e);
-                    remove_session(&session_id);
-                    break;
-                }
-                None => {
-                    // 客户端断开连接
-                    println!("Client disconnected");
-                    remove_session(&session_id);
-                    break;
-                }
-                }
-              }
-              // 其他线程推送过来的消息
-              Some(push_msg) = rx.recv() => {
-                if let Err(e) = ws_sink.send(push_msg).await { 
-                  eprintln!("Send error: {}", e);
-                  break;
-                }
-              }
-            }
-          }
-          // 断开时移除 session
-          remove_session(&session_id);
-        }
-        Err(e) => eprintln!("WebSocket handshake error: {}", e),
-      }
-    });
-  }
+  let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind address");
+  println!("Listening on {}", addr);
+  axum::serve(listener, app).await.expect("Failed to start server");
 }
