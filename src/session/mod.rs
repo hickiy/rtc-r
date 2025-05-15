@@ -44,3 +44,13 @@ pub fn get_tx(username: &str) -> Option<Arc<UnboundedSender<Message>>> {
     None
   }
 }
+
+pub fn get_tx_all() -> Vec<Arc<UnboundedSender<Message>>> {
+  let session_store = SESSION_MAP.lock().unwrap();
+  session_store.values().map(|s| s.tx.clone()).collect()
+}
+
+pub fn get_users() -> Vec<String> {
+  let session_store = SESSION_MAP.lock().unwrap();
+  session_store.keys().cloned().collect()
+}

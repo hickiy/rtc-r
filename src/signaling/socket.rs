@@ -1,71 +1,125 @@
+use crate::session::{add_session, get_tx, get_tx_all, get_users, remove_session};
 use axum::{
-  response::IntoResponse,
-  extract::{ Query, ws::{ WebSocketUpgrade, Message } },
-  http::StatusCode,
+    extract::{
+        Query,
+        ws::{Message, WebSocketUpgrade},
+    },
+    http::StatusCode,
+    response::IntoResponse,
 };
-use serde::Deserialize;
+use futures_util::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use futures_util::{ StreamExt, SinkExt };
-use tokio::sync::mpsc::{ unbounded_channel };
-use crate::session::{ add_session, get_tx, remove_session };
+use tokio::sync::mpsc::unbounded_channel;
 
-#[derive(Debug, Clone, Deserialize)]
-struct Msg {
-  msg_type: String,
-  target: String,
-  content: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "msg_type")]
+pub enum Msg {
+    Offer { target: String, content: String },
+    Answer { target: String, content: String },
+    Candidate { target: String, content: String },
+    UserList { users: Vec<String> },
+    UserJoin { username: String },
+    UserLeave { username: String },
 }
 
 pub async fn socket_handler(
-  ws: WebSocketUpgrade,
-  Query(params): Query<HashMap<String, String>>
+    ws: WebSocketUpgrade,
+    Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-  if let Some(username) = params.get("username") {
-    let username = username.clone();
-    ws.on_upgrade(|socket| async move {
-      let (mut ws_tx, mut ws_rx) = socket.split();
-      let (tx, mut rx) = unbounded_channel::<Message>();
-      add_session(&username, Arc::new(tx));
-      loop {
-        tokio::select! {
-          Some(msg) = ws_rx.next() => {
-            match msg {
-              Ok(msg) => {
-                match msg {
-                  Message::Text(text) => {
-                    let msg: Msg = serde_json::from_str(&text).unwrap();
-                    println!("Received message: {:?}", msg);
-                    
+    if let Some(username) = params.get("username") {
+        let username = username.clone();
+        ws.on_upgrade(|socket| async move {
+            let (mut ws_tx, mut ws_rx) = socket.split();
+            let (tx, mut rx) = unbounded_channel::<Message>();
+            // get all users
+            let users = get_users();
+            // send the user list to the new user
+            let user_list = serde_json::to_string(&Msg::UserList { users }).unwrap();
+            ws_tx.send(Message::Text(user_list.into())).await.unwrap();
+            // get all users' senders
+            let mut txs = get_tx_all();
+            // send the user join message to all users
+            let user_join = serde_json::to_string(&Msg::UserJoin {
+                username: username.clone(),
+            })
+            .unwrap();
+            txs.iter().for_each(|target_tx| {
+                target_tx
+                    .send(Message::Text(user_join.clone().into()))
+                    .unwrap();
+            });
+            // save the sender to the session map
+            add_session(&username, Arc::new(tx));
+            loop {
+                tokio::select! {
+                  Some(msg) = ws_rx.next() => {
+                    match msg {
+                      Ok(msg) => {
+                        match msg {
+                          Message::Text(text) => {
+                            let body: Msg = serde_json::from_str(&text).unwrap();
+                            let handle_relay = |target| {
+                                if let Some(target_tx) = get_tx(target) {
+                                    target_tx.send(Message::Text(text)).unwrap();
+                                } else {
+                                    println!("Target user not found");
+                                }
+                            };
+                            match body {
+                              Msg::Offer { target, .. }
+                              | Msg::Answer { target, .. }
+                              | Msg::Candidate { target, .. } => {
+                                  handle_relay(&target);
+                              }
+                              _ => {
+                                  println!("Unknown message type");
+                              }
+                            }
+                          }
+                          Message::Close(_) => {
+                            println!("Received close message");
+                            break;
+                          }
+                          _ => {
+                            println!("Received other message type");
+                            break;
+                          }
+                        }
+                      }
+                      Err(e) => {
+                        println!("Error receiving message: {:?}", e);
+                        break;
+                      }
+                    }
                   }
-                  Message::Close(_) => {
-                    println!("Received close message");
-                    break;
-                  }
-                  _ => {
-                    println!("Received other message type");
-                    break;
+                  Some(msg) = rx.recv() => {
+                    if let Err(e) = ws_tx.send(msg).await {
+                      println!("Error sending message: {:?}", e);
+                      break;
+                    }
                   }
                 }
-              }
-              Err(e) => {
-                println!("Error receiving message: {:?}", e);
-                break;
-              }
             }
-          }
-          Some(msg) = rx.recv() => {
-            if let Err(e) = ws_tx.send(msg).await {
-              println!("Error sending message: {:?}", e);
-              break;
-            }
-          }
-        }
-      }
-      remove_session(&username);
-      println!("WebSocket connection closed for user: {}", username);
-    })
-  } else {
-    (StatusCode::BAD_REQUEST, "Missing username").into_response()
-  }
+            // remove the user from the session map
+            remove_session(&username);
+            // update txs
+            txs = get_tx_all();
+            // crate the user leave message
+            let user_leave = serde_json::to_string(&Msg::UserLeave {
+                username: username.clone(),
+            })
+            .unwrap();
+            // send the user leave message to all users
+            txs.iter().for_each(|target_tx| {
+                target_tx
+                    .send(Message::Text(user_leave.clone().into()))
+                    .unwrap();
+            });
+            println!("WebSocket connection closed for user: {}", username);
+        })
+    } else {
+        (StatusCode::BAD_REQUEST, "Missing username").into_response()
+    }
 }
