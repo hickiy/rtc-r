@@ -86,17 +86,15 @@ function setUsername() {
 
 // Open and configure the connection to the WebSocket server.
 
-function connect() {
-  var serverUrl;
+async function connect() {
   var scheme = "ws";
-
+  var protocol = document.location.protocol;
   // If this is an HTTPS connection, we have to use a secure WebSocket
   // connection too, so add another "s" to the scheme.
-
-  if (document.location.protocol === "https:") {
+  if (protocol === "https:") {
     scheme += "s";
   }
-  serverUrl = scheme + "://" + myHostname + ":" + port + "/ws";
+
   let username = document.getElementById("name").value;
   let password = document.getElementById("password").value;
 
@@ -104,55 +102,31 @@ function connect() {
     alert("Please enter a username before connecting.");
     return;
   }
-
   if (password.length < 1) {
     alert("Please enter a password before connecting.");
     return;
   }
 
-  serverUrl += "?username=" + username + "&password=" + password;
-
+  let loginUrl = "/login" + "?username=" + username + "&password=" + password
+  await fetch(loginUrl, { method: "get" });
+  return;
+  let serverUrl = scheme + "://" + myHostname + ":" + port + "/ws";
   log(`Connecting to server: ${serverUrl}`);
   connection = new WebSocket(serverUrl);
 
-  connection.onopen = function(evt) {
-    document.getElementById("text").disabled = false;
-    document.getElementById("send").disabled = false;
+  connection.onopen = function (evt) {
+    console.log("Connected to server");
   };
 
-  connection.onerror = function(evt) {
+  connection.onerror = function (evt) {
     console.dir(evt);
   }
 
-  connection.onmessage = function(evt) {
-    var chatBox = document.querySelector(".chatbox");
-    var text = "";
+  connection.onmessage = function (evt) {
     var msg = JSON.parse(evt.data);
     log("Message received: ");
-    console.dir(msg);
-    var time = new Date(msg.date);
-    var timeStr = time.toLocaleTimeString();
 
-    switch(msg.type) {
-      case "id":
-        clientID = msg.id;
-        setUsername();
-        break;
-
-      case "username":
-        text = "<b>User <em>" + msg.name + "</em> signed in at " + timeStr + "</b><br>";
-        break;
-
-      case "message":
-        text = "(" + timeStr + ") <b>" + msg.name + "</b>: " + msg.text + "<br>";
-        break;
-
-      case "rejectusername":
-        myUsername = msg.name;
-        text = "<b>Your username has been set to <em>" + myUsername +
-          "</em> because the name you chose is in use.</b><br>";
-        break;
-
+    switch (msg.msg_type) {
       case "userlist":      // Received an updated user list
         handleUserlistMsg(msg);
         break;
@@ -183,39 +157,7 @@ function connect() {
         log_error("Unknown message received:");
         log_error(msg);
     }
-
-    // If there's text to insert into the chat buffer, do so now, then
-    // scroll the chat panel so that the new text is visible.
-
-    if (text.length) {
-      chatBox.innerHTML += text;
-      chatBox.scrollTop = chatBox.scrollHeight - chatBox.clientHeight;
-    }
   };
-}
-
-// Handles a click on the Send button (or pressing return/enter) by
-// building a "message" object and sending it to the server.
-function handleSendButton() {
-  var msg = {
-    text: document.getElementById("text").value,
-    type: "message",
-    id: clientID,
-    date: Date.now()
-  };
-  sendToServer(msg);
-  document.getElementById("text").value = "";
-}
-
-// Handler for keyboard events. This is used to intercept the return and
-// enter keys so that we can call send() to transmit the entered text
-// to the server.
-function handleKey(evt) {
-  if (evt.keyCode === 13 || evt.keyCode === 14) {
-    if (!document.getElementById("send").disabled) {
-      handleSendButton();
-    }
-  }
 }
 
 // Create the RTCPeerConnection which knows how to talk to our
@@ -284,7 +226,7 @@ async function handleNegotiationNeededEvent() {
       type: "video-offer",
       sdp: myPeerConnection.localDescription
     });
-  } catch(err) {
+  } catch (err) {
     log("*** The following error occurred while handling the negotiationneeded event:");
     reportError(err);
   };
@@ -334,7 +276,7 @@ function handleICECandidateEvent(event) {
 function handleICEConnectionStateChangeEvent(event) {
   log("*** ICE connection state changed to " + myPeerConnection.iceConnectionState);
 
-  switch(myPeerConnection.iceConnectionState) {
+  switch (myPeerConnection.iceConnectionState) {
     case "closed":
     case "failed":
     case "disconnected":
@@ -352,7 +294,7 @@ function handleICEConnectionStateChangeEvent(event) {
 
 function handleSignalingStateChangeEvent(event) {
   log("*** WebRTC signaling state changed to: " + myPeerConnection.signalingState);
-  switch(myPeerConnection.signalingState) {
+  switch (myPeerConnection.signalingState) {
     case "closed":
       closeVideoCall();
       break;
@@ -391,7 +333,7 @@ function handleUserlistMsg(msg) {
 
   // Add member names from the received list.
 
-  msg.users.forEach(function(username) {
+  msg.users.forEach(function (username) {
     var item = document.createElement("li");
     item.appendChild(document.createTextNode(username));
     item.addEventListener("click", invite, false);
@@ -519,7 +461,7 @@ async function invite(evt) {
     try {
       webcamStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       document.getElementById("local_video").srcObject = webcamStream;
-    } catch(err) {
+    } catch (err) {
       handleGetUserMediaError(err);
       return;
     }
@@ -528,9 +470,9 @@ async function invite(evt) {
 
     try {
       webcamStream.getTracks().forEach(
-        transceiver = track => myPeerConnection.addTransceiver(track, {streams: [webcamStream]})
+        transceiver = track => myPeerConnection.addTransceiver(track, { streams: [webcamStream] })
       );
-    } catch(err) {
+    } catch (err) {
       handleGetUserMediaError(err);
     }
   }
@@ -564,12 +506,12 @@ async function handleVideoOfferMsg(msg) {
     // Set the local and remove descriptions for rollback; don't proceed
     // until both return.
     await Promise.all([
-      myPeerConnection.setLocalDescription({type: "rollback"}),
+      myPeerConnection.setLocalDescription({ type: "rollback" }),
       myPeerConnection.setRemoteDescription(desc)
     ]);
     return;
   } else {
-    log ("  - Setting remote description");
+    log("  - Setting remote description");
     await myPeerConnection.setRemoteDescription(desc);
   }
 
@@ -578,7 +520,7 @@ async function handleVideoOfferMsg(msg) {
   if (!webcamStream) {
     try {
       webcamStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
-    } catch(err) {
+    } catch (err) {
       handleGetUserMediaError(err);
       return;
     }
@@ -589,9 +531,9 @@ async function handleVideoOfferMsg(msg) {
 
     try {
       webcamStream.getTracks().forEach(
-        transceiver = track => myPeerConnection.addTransceiver(track, {streams: [webcamStream]})
+        transceiver = track => myPeerConnection.addTransceiver(track, { streams: [webcamStream] })
       );
-    } catch(err) {
+    } catch (err) {
       handleGetUserMediaError(err);
     }
   }
@@ -631,7 +573,7 @@ async function handleNewICECandidateMsg(msg) {
   log("*** Adding received ICE candidate: " + JSON.stringify(candidate));
   try {
     await myPeerConnection.addIceCandidate(candidate)
-  } catch(err) {
+  } catch (err) {
     reportError(err);
   }
 }
@@ -645,10 +587,10 @@ async function handleNewICECandidateMsg(msg) {
 
 function handleGetUserMediaError(e) {
   log_error(e);
-  switch(e.name) {
+  switch (e.name) {
     case "NotFoundError":
       alert("Unable to open your call because no camera and/or microphone" +
-            "were found.");
+        "were found.");
       break;
     case "SecurityError":
     case "PermissionDeniedError":

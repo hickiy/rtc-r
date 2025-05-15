@@ -2,7 +2,7 @@
 name = "rtc-r"
 version = "0.1.0"
 edition = "2024"
-
+default-run = "rtc-r"
 
 [dependencies]
 bcrypt = "0.17"
