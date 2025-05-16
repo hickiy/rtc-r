@@ -12,7 +12,7 @@
 <body>
   <div class="container">
     <div class="infobox">
-      <p class="mdn-disclaimer">This text and audio/video chat example is offered as-is for demonstration purposes only,
+      <p class="mdn-disclaimer">This audio/video chat example is offered as-is for demonstration purposes only,
         and should not be used for any other purpose.
       </p>
       <p>Click a username in the user list to ask them to enter a one-on-one video chat with you.</p>
@@ -22,6 +22,7 @@
         <input id="password" type="password" maxlength="6" required autocomplete="pwassword" inputmode="numeric"
           placeholder="Password">
         <input type="button" name="login" value="Log in" onclick="connect()">
+        <input type="button" name="logout" value="Log out" onclick="disconnect()">
       </p>
     </div>
     <ul class="userlistbox"></ul>

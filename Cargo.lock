@@ -1583,6 +1583,7 @@ dependencies = [
 name = "rtc-r"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum 0.8.4",
  "bcrypt",
  "chrono",

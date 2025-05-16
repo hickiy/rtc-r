@@ -16,25 +16,28 @@ use std::collections::HashMap;
 use tower_http::services::ServeDir;
 
 // auth_middleware
-async fn auth_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
+async fn auth_middleware(mut req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     // check cookie，extra the token from cookie
-    if let Some(cookie) = req.headers().get("Cookie") {
-        if let Ok(cookie_str) = cookie.to_str() {
-            let token = cookie_str
-                .split(';')
-                .find(|s| s.trim().starts_with("token="))
-                .map(|s| s.trim().split('=').nth(1).unwrap_or(""));
-            if let Some(token) = token {
-                println!("Token: {}", token);
-                if authenticate(token) {
-                    return Ok(next.run(req).await);
-                } else {
-                    return Err(StatusCode::UNAUTHORIZED);
-                }
-            }
-        }
+    let cookies = req
+        .headers()
+        .get("Cookie")
+        .unwrap_or(&HeaderValue::from_static(""))
+        .clone();
+
+    let token = cookies
+        .to_str()
+        .unwrap()
+        .split(';')
+        .find(|s| s.trim().starts_with("token="))
+        .map(|s| s.trim().split('=').nth(1).unwrap())
+        .unwrap();
+    if authenticate(token) {
+        // 将 token 添加到请求的扩展中，传递给后续处理函数
+        req.extensions_mut().insert(token.to_string());
+        return Ok(next.run(req).await);
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
     }
-    Err(StatusCode::UNAUTHORIZED)
 }
 
 async fn login_handler(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
@@ -67,10 +70,10 @@ async fn login_handler(Query(params): Query<HashMap<String, String>>) -> impl In
     }
 }
 
-async fn logout_handler(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
-    if let Some(username) = params.get("username") {
-        logout(username);
-        return (StatusCode::OK, format!("Logged out user: {}", username));
+async fn logout_handler(req: Request<Body>) -> impl IntoResponse {
+    if let Some(token) = req.extensions().get::<String>() {
+        logout(token);
+        return (StatusCode::OK, format!("Logged out user: {}", token));
     } else {
         return (StatusCode::BAD_REQUEST, "Missing username".to_string());
     }

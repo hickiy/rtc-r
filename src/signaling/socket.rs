@@ -1,35 +1,53 @@
 use crate::session::{add_session, get_tx, get_tx_all, get_users, remove_session};
+use crate::user::get_username_from_token;
 use axum::{
-    extract::{
-        Query,
-        ws::{Message, WebSocketUpgrade},
-    },
+    extract::ws::{Message, WebSocketUpgrade},
     http::StatusCode,
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::unbounded_channel;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "msg_type")]
 pub enum Msg {
-    Offer { target: String, content: String },
-    Answer { target: String, content: String },
-    Candidate { target: String, content: String },
-    UserList { users: Vec<String> },
-    UserJoin { username: String },
-    UserLeave { username: String },
+    Offer {
+        name: String,
+        target: String,
+        sdp: String,
+    },
+    Answer {
+        name: String,
+        target: String,
+        sdp: String,
+    },
+    Candidate {
+        target: String,
+        candidate: String,
+    },
+    HangUp {
+        target: String,
+    },
+    UserList {
+        users: Vec<String>,
+    },
+    UserJoin {
+        username: String,
+    },
+    UserLeave {
+        username: String,
+    },
 }
 
 pub async fn socket_handler(
     ws: WebSocketUpgrade,
-    Query(params): Query<HashMap<String, String>>,
+    req: axum::http::Request<axum::body::Body>,
 ) -> impl IntoResponse {
-    if let Some(username) = params.get("username") {
-        let username = username.clone();
+    if let Some(token) = req.extensions().get::<String>() {
+        let username = get_username_from_token(token).unwrap();
+        println!("WebSocket connection established for user: {}", username);
         ws.on_upgrade(|socket| async move {
             let (mut ws_tx, mut ws_rx) = socket.split();
             let (tx, mut rx) = unbounded_channel::<Message>();
@@ -70,7 +88,8 @@ pub async fn socket_handler(
                             match body {
                               Msg::Offer { target, .. }
                               | Msg::Answer { target, .. }
-                              | Msg::Candidate { target, .. } => {
+                              | Msg::Candidate { target, .. }
+                              | Msg::HangUp {target, ..} => {
                                   handle_relay(&target);
                               }
                               _ => {

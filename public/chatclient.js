@@ -47,7 +47,6 @@ var webcamStream = null;        // MediaStream from webcam
 
 function log(text) {
   var time = new Date();
-
   console.log("[" + time.toLocaleTimeString() + "] " + text);
 }
 
@@ -64,24 +63,8 @@ function log_error(text) {
 
 function sendToServer(msg) {
   var msgJSON = JSON.stringify(msg);
-
   log("Sending '" + msg.type + "' message: " + msgJSON);
   connection.send(msgJSON);
-}
-
-// Called when the "id" message is received; this message is sent by the
-// server to assign this login session a unique ID number; in response,
-// this function sends a "username" message to set our username for this
-// session.
-function setUsername() {
-  myUsername = document.getElementById("name").value;
-
-  sendToServer({
-    name: myUsername,
-    date: Date.now(),
-    id: clientID,
-    type: "username"
-  });
 }
 
 // Open and configure the connection to the WebSocket server.
@@ -95,21 +78,29 @@ async function connect() {
     scheme += "s";
   }
 
-  let username = document.getElementById("name").value;
-  let password = document.getElementById("password").value;
+  let username = document.getElementById("name");
+  let password = document.getElementById("password");
 
-  if (username.length < 1) {
+  if (username.value.length < 1) {
     alert("Please enter a username before connecting.");
     return;
   }
-  if (password.length < 1) {
+  if (password.value.length < 1) {
     alert("Please enter a password before connecting.");
     return;
   }
 
-  let loginUrl = "/login" + "?username=" + username + "&password=" + password
-  await fetch(loginUrl, { method: "get" });
-  return;
+  let loginUrl = "/login" + "?username=" + username.value + "&password=" + password.value
+  try {
+    await fetch(loginUrl, { method: "get" });
+    username.disabled = true;
+    password.disabled = true;
+  }
+  catch (err) {
+    alert("Error logging in: " + err);
+    return;
+  }
+
   let serverUrl = scheme + "://" + myHostname + ":" + port + "/ws";
   log(`Connecting to server: ${serverUrl}`);
   connection = new WebSocket(serverUrl);
@@ -124,40 +115,53 @@ async function connect() {
 
   connection.onmessage = function (evt) {
     var msg = JSON.parse(evt.data);
-    log("Message received: ");
-
+    console.log("Message received: ", msg);
     switch (msg.msg_type) {
-      case "userlist":      // Received an updated user list
+      case "UserList":      // Received an updated user list
         handleUserlistMsg(msg);
         break;
-
+      case "UserJoin":
+        handleUserJoinMsg(msg);
+        break;
+      case "UserLeave":
+        handleUserLeaveMsg(msg);
+        break;
       // Signaling messages: these messages are used to trade WebRTC
       // signaling information during negotiations leading up to a video
       // call.
-
-      case "video-offer":  // Invitation and offer to chat
+      case "Offer":  // Invitation and offer to chat
         handleVideoOfferMsg(msg);
         break;
-
-      case "video-answer":  // Callee has answered our offer
+      case "Answer":  // Callee has answered our offer
         handleVideoAnswerMsg(msg);
         break;
-
-      case "new-ice-candidate": // A new ICE candidate has been received
+      case "Candidate": // A new ICE candidate has been received
         handleNewICECandidateMsg(msg);
         break;
-
-      case "hang-up": // The other peer has hung up the call
+      case "HangUp": // The other peer has hung up the call
         handleHangUpMsg(msg);
         break;
-
       // Unknown message; output to console for debugging.
-
       default:
         log_error("Unknown message received:");
         log_error(msg);
     }
   };
+}
+
+async function disconnect() {
+  let logoutUrl = "/logout";
+  await fetch(logoutUrl, { method: "get" });
+  if (connection) {
+    connection.close();
+    connection = null;
+    let username = document.getElementById("name");
+    let password = document.getElementById("password");
+    username.disabled = false;
+    password.disabled = false;
+    username.value = "";
+    password.value = "";
+  }
 }
 
 // Create the RTCPeerConnection which knows how to talk to our
@@ -221,9 +225,9 @@ async function handleNegotiationNeededEvent() {
 
     log("---> Sending the offer to the remote peer");
     sendToServer({
+      msg_type: "Offer",
       name: myUsername,
       target: targetUsername,
-      type: "video-offer",
       sdp: myPeerConnection.localDescription
     });
   } catch (err) {
@@ -261,7 +265,7 @@ function handleICECandidateEvent(event) {
     log("*** Outgoing ICE candidate: " + event.candidate.candidate);
 
     sendToServer({
-      type: "new-ice-candidate",
+      msg_type: "Candidate",
       target: targetUsername,
       candidate: event.candidate
     });
@@ -342,6 +346,32 @@ function handleUserlistMsg(msg) {
   });
 }
 
+
+// Handle a message indicating that a new user has joined the chat.
+function handleUserJoinMsg(msg) {
+  var listElem = document.querySelector(".userlistbox");
+  var item = document.createElement("li");
+  item.appendChild(document.createTextNode(msg.username));
+  item.addEventListener("click", invite, false);
+  listElem.appendChild(item);
+}
+
+
+// Handle a message indicating that a user has left the chat.
+function handleUserLeaveMsg(msg) {
+  var listElem = document.querySelector(".userlistbox");
+  var items = listElem.getElementsByTagName("li");
+
+  // Remove the user from the list of users.
+
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].textContent === msg.username) {
+      listElem.removeChild(items[i]);
+      break;
+    }
+  }
+}
+
 // Close the RTCPeerConnection and reset variables so that the user can
 // make or receive another call if they wish. This is called both
 // when the user hangs up, the other user hangs up, or if a connection
@@ -397,31 +427,6 @@ function closeVideoCall() {
   targetUsername = null;
 }
 
-// Handle the "hang-up" message, which is sent if the other peer
-// has hung up the call or otherwise disconnected.
-
-function handleHangUpMsg(msg) {
-  log("*** Received hang up notification from other peer");
-
-  closeVideoCall();
-}
-
-// Hang up the call by closing our end of the connection, then
-// sending a "hang-up" message to the other peer (keep in mind that
-// the signaling is done on a different connection). This notifies
-// the other peer that the connection should be terminated and the UI
-// returned to the "no call in progress" state.
-
-function hangUpCall() {
-  closeVideoCall();
-
-  sendToServer({
-    name: myUsername,
-    target: targetUsername,
-    type: "hang-up"
-  });
-}
-
 // Handle a click on an item in the user list by inviting the clicked
 // user to video chat. Note that we don't actually send a message to
 // the callee here -- calling RTCPeerConnection.addTrack() issues
@@ -433,14 +438,8 @@ async function invite(evt) {
   if (myPeerConnection) {
     alert("You can't start a call because you already have one open!");
   } else {
+
     var clickedUsername = evt.target.textContent;
-
-    // Don't allow users to call themselves, because weird.
-
-    if (clickedUsername === myUsername) {
-      alert("I'm afraid I can't let you talk to yourself. That would be weird.");
-      return;
-    }
 
     // Record the username being called for future reference
 
@@ -543,21 +542,21 @@ async function handleVideoOfferMsg(msg) {
   await myPeerConnection.setLocalDescription(await myPeerConnection.createAnswer());
 
   sendToServer({
+    msg_type: "Answer",
     name: myUsername,
     target: targetUsername,
-    type: "video-answer",
     sdp: myPeerConnection.localDescription
   });
 }
 
-// Responds to the "video-answer" message sent to the caller
+// Responds to the "Answer" message sent to the caller
 // once the callee has decided to accept our request to talk.
 
 async function handleVideoAnswerMsg(msg) {
   log("*** Call recipient has accepted our call");
 
   // Configure the remote description, which is the SDP payload
-  // in our "video-answer" message.
+  // in our "Answer" message.
 
   var desc = new RTCSessionDescription(msg.sdp);
   await myPeerConnection.setRemoteDescription(desc).catch(reportError);
@@ -603,6 +602,30 @@ function handleGetUserMediaError(e) {
 
   // Make sure we shut down our end of the RTCPeerConnection so we're
   // ready to try again.
+
+  closeVideoCall();
+}
+
+// Hang up the call by closing our end of the connection, then
+// sending a "hang-up" message to the other peer (keep in mind that
+// the signaling is done on a different connection). This notifies
+// the other peer that the connection should be terminated and the UI
+// returned to the "no call in progress" state.
+
+function hangUpCall() {
+  closeVideoCall();
+
+  sendToServer({
+    msg_type: "HangUp",
+    target: targetUsername,
+  });
+}
+
+// Handle the "hang-up" message, which is sent if the other peer
+// has hung up the call or otherwise disconnected.
+
+function handleHangUpMsg(msg) {
+  log("*** Received hang up notification from other peer");
 
   closeVideoCall();
 }
