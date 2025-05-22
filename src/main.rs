@@ -1,6 +1,10 @@
 use rtc_r::signaling::run_web_server;
+use rtc_r::turn_server::create_turn_server;
 
 #[tokio::main]
 async fn main() {
-  run_web_server("127.0.0.1:8888").await;
+    tokio::spawn(async {
+        run_web_server("127.0.0.1:8888").await;
+    });
+    create_turn_server("127.0.0.1:3478").await;
 }

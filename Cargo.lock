@@ -1583,12 +1583,14 @@ dependencies = [
 name = "rtc-r"
 version = "0.1.0"
 dependencies = [
- "async-trait",
+ "anyhow",
  "axum 0.8.4",
  "bcrypt",
+ "bytes",
  "chrono",
  "futures-util",
  "jsonwebtoken",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",

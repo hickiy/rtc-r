@@ -180,8 +180,8 @@ async function createPeerConnection() {
     iceServers: [     // Information about ICE servers - Use your own!
       {
         urls: "turn:" + myHostname,  // A TURN server
-        username: "webrtc",
-        credential: "turnserver"
+        username: "yanyun",
+        credential: "245786"
       }
     ]
   });

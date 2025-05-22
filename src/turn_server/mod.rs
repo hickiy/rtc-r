@@ -1,21 +1,32 @@
-use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use turn_server::api::start_server;
-use turn_server::config::{Auth, Config, Interface, Transport, Turn};
+use std::net::SocketAddrV4;
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use turn_server::{
+    config::{Api, Auth, Config, Interface, Log, Transport, Turn},
+    startup,
+};
 
-async fn run_turn_server(addr: String) {
-    let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3478);
-    let interfase: Interface = Interface {
-        transport: Transport::UDP,
-        bind: socket_addr,
-        external: socket_addr,
-    };
-    let turn: Turn = Turn {
-        realm: "localhost".to_string(),
-        interfaces: vec![interfase],
-    };
+pub async fn create_turn_server(addr: &str) {
+    let bind = SocketAddr::V4(addr.parse::<SocketAddrV4>().unwrap());
+    let mut static_credentials = HashMap::with_capacity(1);
+    static_credentials.insert("yanyun".to_string(), "245786".to_string());
     let auth = Auth {
-        static_credentials: HashMap::with_capacity([("yanyun", "245786")]),
+        static_credentials,
         static_auth_secret: None,
     };
+    println!("TURN server started on {}", addr);
+    startup(Arc::new(Config {
+        log: Log::default(),
+        turn: Turn {
+            realm: "localhost".to_string(),
+            interfaces: vec![Interface {
+                transport: Transport::UDP,
+                external: bind,
+                bind,
+            }],
+        },
+        auth,
+        api: Api::default(),
+    }))
+    .await
+    .expect("Failed to start TURN server");
 }
