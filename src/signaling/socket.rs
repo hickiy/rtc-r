@@ -77,6 +77,7 @@ pub async fn socket_handler(
                       Ok(msg) => {
                         match msg {
                           Message::Text(text) => {
+                            println!("Received message: {:?}", text);
                             let body: Msg = serde_json::from_str(&text).unwrap();
                             let handle_relay = |target| {
                                 if let Some(target_tx) = get_tx(target) {

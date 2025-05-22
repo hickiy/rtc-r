@@ -78,7 +78,7 @@ async function connect() {
     scheme += "s";
   }
 
-  let username = document.getElementById("name");
+  let username = myUsername = document.getElementById("name");
   let password = document.getElementById("password");
 
   if (username.value.length < 1) {
