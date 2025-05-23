@@ -12,6 +12,7 @@ use tokio::sync::mpsc::unbounded_channel;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "msg_type")]
+#[derive(PartialEq)]
 pub enum Msg {
     Offer {
         name: String,
@@ -63,10 +64,8 @@ pub async fn socket_handler(
                 username: username.clone(),
             })
             .unwrap();
-            txs.iter().for_each(|target_tx| {
-                target_tx
-                    .send(Message::Text(user_join.clone().into()))
-                    .unwrap();
+            txs.iter().for_each(|tx| {
+                tx.send(Message::Text(user_join.clone().into())).unwrap();
             });
             // save the sender to the session map
             add_session(&username, Arc::new(tx));
@@ -77,11 +76,10 @@ pub async fn socket_handler(
                       Ok(msg) => {
                         match msg {
                           Message::Text(text) => {
-                            println!("Received message: {:?}", text);
-                            let body: Msg = serde_json::from_str(&text).unwrap();
+                            let body: Msg = serde_json::from_str(text.as_str()).unwrap();
                             let handle_relay = |target| {
-                                if let Some(target_tx) = get_tx(target) {
-                                    target_tx.send(Message::Text(text)).unwrap();
+                                if let Some(tx) = get_tx(target) {
+                                    tx.send(Message::Text(text)).unwrap();
                                 } else {
                                     println!("Target user not found");
                                 }
@@ -91,7 +89,7 @@ pub async fn socket_handler(
                               | Msg::Answer { target, .. }
                               | Msg::Candidate { target, .. }
                               | Msg::HangUp {target, ..} => {
-                                  handle_relay(&target);
+                                  handle_relay(target.as_str());
                               }
                               _ => {
                                   println!("Unknown message type");
@@ -116,7 +114,7 @@ pub async fn socket_handler(
                   }
                   Some(msg) = rx.recv() => {
                     if let Err(e) = ws_tx.send(msg).await {
-                      println!("Error sending message: {:?}", e);
+                      println!("Error sending message: {}", e);
                       break;
                     }
                   }

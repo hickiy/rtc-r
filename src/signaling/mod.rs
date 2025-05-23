@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-mod socket;
+pub mod socket;
 use self::socket::socket_handler;
 use crate::user::{authenticate, login, logout};
 use axum::http::{HeaderMap, HeaderValue};
@@ -52,7 +52,7 @@ async fn login_handler(Query(params): Query<HashMap<String, String>>) -> impl In
             return (
                 StatusCode::OK,
                 headers,
-                format!("Logged in user: {} with token: {}", username, token),
+                token,
             );
         } else {
             return (
