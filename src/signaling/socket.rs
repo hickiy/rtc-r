@@ -14,32 +14,10 @@ use tokio::sync::mpsc::unbounded_channel;
 #[serde(tag = "msg_type")]
 #[derive(PartialEq)]
 pub enum Msg {
-    Offer {
-        name: String,
-        target: String,
-        sdp: String,
-    },
-    Answer {
-        name: String,
-        target: String,
-        sdp: String,
-    },
-    Candidate {
-        target: String,
-        candidate: String,
-    },
-    HangUp {
-        target: String,
-    },
-    UserList {
-        users: Vec<String>,
-    },
-    UserJoin {
-        username: String,
-    },
-    UserLeave {
-        username: String,
-    },
+    HangUp { target: String },
+    UserList { users: Vec<String> },
+    UserJoin { username: String },
+    UserLeave { username: String },
 }
 
 pub async fn socket_handler(
@@ -76,24 +54,19 @@ pub async fn socket_handler(
                       Ok(msg) => {
                         match msg {
                           Message::Text(text) => {
-                            let body: Msg = serde_json::from_str(text.as_str()).unwrap();
-                            let handle_relay = |target| {
-                                if let Some(tx) = get_tx(target) {
-                                    tx.send(Message::Text(text)).unwrap();
+                            let body: serde_json::Value  = serde_json::from_str(text.as_str()).unwrap();
+                            if let Some(target) = body.get("target") {
+                                if let Some(target) = target.as_str() {
+                                    if let Some(tx) = get_tx(target) {
+                                        tx.send(Message::Text(text)).unwrap();
+                                    } else {
+                                        println!("Target user not found");
+                                    }
                                 } else {
-                                    println!("Target user not found");
+                                   println!("Target user not found");
                                 }
-                            };
-                            match body {
-                              Msg::Offer { target, .. }
-                              | Msg::Answer { target, .. }
-                              | Msg::Candidate { target, .. }
-                              | Msg::HangUp {target, ..} => {
-                                  handle_relay(target.as_str());
-                              }
-                              _ => {
-                                  println!("Unknown message type");
-                              }
+                            } else {
+                                println!("Target user not found");
                             }
                           }
                           Message::Close(_) => {
@@ -130,8 +103,8 @@ pub async fn socket_handler(
             })
             .unwrap();
             // send the user leave message to all users
-            txs.iter().for_each(|target_tx| {
-                target_tx
+            txs.iter().for_each(|tx| {
+                tx
                     .send(Message::Text(user_leave.clone().into()))
                     .unwrap();
             });

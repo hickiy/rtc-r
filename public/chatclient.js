@@ -54,7 +54,6 @@ function log(text) {
 
 function log_error(text) {
   var time = new Date();
-
   console.trace("[" + time.toLocaleTimeString() + "] " + text);
 }
 
@@ -63,7 +62,6 @@ function log_error(text) {
 
 function sendToServer(msg) {
   var msgJSON = JSON.stringify(msg);
-  log("Sending '" + msg.type + "' message: " + msgJSON);
   connection.send(msgJSON);
 }
 
@@ -78,9 +76,8 @@ async function connect() {
     scheme += "s";
   }
 
-  let username = myUsername = document.getElementById("name");
+  let username = document.getElementById("name");
   let password = document.getElementById("password");
-
   if (username.value.length < 1) {
     alert("Please enter a username before connecting.");
     return;
@@ -89,7 +86,7 @@ async function connect() {
     alert("Please enter a password before connecting.");
     return;
   }
-
+  myUsername = username.value;
   let loginUrl = "/login" + "?username=" + username.value + "&password=" + password.value
   try {
     await fetch(loginUrl, { method: "get" });
@@ -106,7 +103,7 @@ async function connect() {
   connection = new WebSocket(serverUrl);
 
   connection.onopen = function (evt) {
-    console.log("Connected to server");
+    log("Connected to signaling server");
   };
 
   connection.onerror = function (evt) {
@@ -115,7 +112,6 @@ async function connect() {
 
   connection.onmessage = function (evt) {
     var msg = JSON.parse(evt.data);
-    console.log("Message received: ", msg);
     switch (msg.msg_type) {
       case "UserList":      // Received an updated user list
         handleUserlistMsg(msg);
@@ -483,7 +479,6 @@ async function invite(evt) {
 
 async function handleVideoOfferMsg(msg) {
   targetUsername = msg.name;
-
   // If we're not already connected, create an RTCPeerConnection
   // to be linked to the caller.
 
