@@ -4,7 +4,7 @@ use rtc_r::turn_server::create_turn_server;
 #[tokio::main]
 async fn main() {
     tokio::spawn(async {
-        run_web_server("127.0.0.1:8888").await;
+        run_web_server("0.0.0.0:8888").await;
     });
-    create_turn_server("127.0.0.1:3478").await;
+    create_turn_server("0.0.0.0:3478").await;
 }
