@@ -3,10 +3,10 @@
 <head>
   <title>WebSocket Chat Demo with WebRTC Calling</title>
   <meta charset="utf-8">
-  <link href="chat.css" rel="stylesheet">
-  <link rel="icon" type="image/png" href="favicon.jpg">
-  <script type="text/javascript" src="chatclient.js"></script>
-  <script src="adapter.js"></script>
+  <link href="/webrtc/chat.css" rel="stylesheet">
+  <link rel="icon" type="image/png" href="/webrtc/favicon.jpg">
+  <script type="text/javascript" src="/webrtc/chatclient.js"></script>
+  <script src="/webrtcadapter.js"></script>
 </head>
 
 <body>
@@ -17,9 +17,9 @@
       </p>
       <p>Click a username in the user list to ask them to enter a one-on-one video chat with you.</p>
       <p>Enter a username and a password:
-        <input id="name" type="text" maxlength="12" required autocomplete="username" inputmode="text"
+        <input id="name" type="text" maxlength="12" required inputmode="text"
           placeholder="Username">
-        <input id="password" type="password" maxlength="6" required autocomplete="pwassword" inputmode="numeric"
+        <input id="password" type="text" maxlength="6" required inputmode="text"
           placeholder="Password">
         <input type="button" name="login" value="Log in" onclick="connect()">
         <input type="button" name="logout" value="Log out" onclick="disconnect()">

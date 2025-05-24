@@ -98,7 +98,7 @@ async function connect() {
     return;
   }
 
-  let serverUrl = scheme + "://" + myHostname + ":" + port + "/webrtc/ws";
+  let serverUrl = scheme + "://" + myHostname + (port ? `:${port}` : '') + "/webrtc/ws";
   log(`Connecting to server: ${serverUrl}`);
   connection = new WebSocket(serverUrl);
 
