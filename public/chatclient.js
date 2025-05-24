@@ -87,7 +87,7 @@ async function connect() {
     return;
   }
   myUsername = username.value;
-  let loginUrl = "/login" + "?username=" + username.value + "&password=" + password.value
+  let loginUrl = "/webrtc/login" + "?username=" + username.value + "&password=" + password.value
   try {
     await fetch(loginUrl, { method: "get" });
     username.disabled = true;
@@ -98,7 +98,7 @@ async function connect() {
     return;
   }
 
-  let serverUrl = scheme + "://" + myHostname + ":" + port + "/ws";
+  let serverUrl = scheme + "://" + myHostname + ":" + port + "/webrtc/ws";
   log(`Connecting to server: ${serverUrl}`);
   connection = new WebSocket(serverUrl);
 
@@ -146,7 +146,7 @@ async function connect() {
 }
 
 async function disconnect() {
-  let logoutUrl = "/logout";
+  let logoutUrl = "/webrtc/logout";
   await fetch(logoutUrl, { method: "get" });
   if (connection) {
     connection.close();
